@@ -2,19 +2,16 @@ name: Auto Sync and Build
 
 on:
   schedule:
-    # Run every 6 hours
-    - cron: '0 */6 * * *'
-  workflow_dispatch:
+    - cron: '0 */6 * * *' # Check every 6 hours
+  workflow_dispatch:      # Allow manual trigger
 
 permissions:
   contents: write
 
 jobs:
   sync-and-build:
-    # CHANGED: Use Windows to support .NET Framework 4.8
     runs-on: windows-latest
     
-    # CHANGED: Force all run steps to use Bash (so our sync script works on Windows)
     defaults:
       run:
         shell: bash
@@ -63,9 +60,28 @@ jobs:
           dotnet restore
           dotnet build --configuration Release --no-restore
 
-      - name: Upload DLL Artifact
+      - name: Generate Release Tag
+        id: tag
         if: steps.sync.outputs.updated == 'true' || github.event_name == 'workflow_dispatch'
-        uses: actions/upload-artifact@v4
+        run: |
+          echo "release_tag=v$(date +"%Y.%m.%d")-$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        if: steps.sync.outputs.updated == 'true' || github.event_name == 'workflow_dispatch'
+        uses: softprops/action-gh-release@v1
         with:
-          name: HsMod-DLL
-          path: HsMod/**/Release/**/*.dll
+          tag_name: ${{ steps.tag.outputs.release_tag }}
+          name: Auto-Build ${{ steps.tag.outputs.release_tag }}
+          files: HsMod/**/Release/**/*.dll
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # NOTIFICATION STEP
+      - name: Notify via Bark
+        if: steps.sync.outputs.updated == 'true' || github.event_name == 'workflow_dispatch'
+        env:
+          BARK_KEY: ${{ secrets.BARK_KEY }}
+        run: |
+          VERSION="${{ steps.tag.outputs.release_tag }}"
+          curl -G "https://api.day.app/$BARK_KEY/HsMod/New%20Release%20$VERSION" \
+            --data-urlencode "group=GitHub Actions"
