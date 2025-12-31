@@ -58,7 +58,8 @@ jobs:
         run: |
           cd HsMod
           dotnet restore
-          dotnet build --configuration Release --no-restore
+          # CHANGED: Force output to a specific folder to avoid path confusion
+          dotnet build --configuration Release --no-restore --output ./BuildOutput
 
       - name: Generate Release Tag
         id: tag
@@ -72,11 +73,11 @@ jobs:
         with:
           tag_name: ${{ steps.tag.outputs.release_tag }}
           name: Auto-Build ${{ steps.tag.outputs.release_tag }}
-          # CHANGED: Added 'bin' to the path to exclude 'obj' folder duplicates
-          files: HsMod/**/bin/Release/**/HsMod.dll
+          # CHANGED: Point to our new custom output folder
+          files: HsMod/BuildOutput/**/*.dll
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
+          
       # NOTIFICATION STEP
       - name: Notify via Bark
         if: steps.sync.outputs.updated == 'true' || github.event_name == 'workflow_dispatch'
