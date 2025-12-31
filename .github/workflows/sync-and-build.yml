@@ -2,7 +2,7 @@ name: Auto Sync and Build
 
 on:
   schedule:
-    - cron: '0 */6 * * *' # Check every 6 hours
+    - cron: '0 19 * * *'
   workflow_dispatch:      # Allow manual trigger
 
 permissions:
@@ -72,7 +72,8 @@ jobs:
         with:
           tag_name: ${{ steps.tag.outputs.release_tag }}
           name: Auto-Build ${{ steps.tag.outputs.release_tag }}
-          files: HsMod/**/Release/**/*.dll
+          # CHANGED: Only upload the mod itself, ignoring UnityEngine DLLs
+          files: HsMod/**/Release/**/HsMod.dll
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
