@@ -72,8 +72,8 @@ jobs:
         with:
           tag_name: ${{ steps.tag.outputs.release_tag }}
           name: Auto-Build ${{ steps.tag.outputs.release_tag }}
-          # CHANGED: Only upload the mod itself, ignoring UnityEngine DLLs
-          files: HsMod/**/Release/**/HsMod.dll
+          # CHANGED: Added 'bin' to the path to exclude 'obj' folder duplicates
+          files: HsMod/**/bin/Release/**/HsMod.dll
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
