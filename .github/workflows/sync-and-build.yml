@@ -1,0 +1,73 @@
+name: Auto Sync and Build
+
+on:
+  # Check for updates automatically every 6 hours
+  schedule:
+    - cron: '0 */6 * * *'
+  # Allow you to manually trigger the build from the Actions tab
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync-and-build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Fork
+        uses: actions/checkout@v4
+        with:
+          ref: bepinex5   # We are targeting this specific branch
+          fetch-depth: 0  # Required to merge history
+
+      - name: Configure Git
+        run: |
+          git config user.name "GitHub Action"
+          git config user.email "action@github.com"
+
+      - name: Sync with Upstream (Original Repo)
+        id: sync
+        run: |
+          # Add the original repo as a remote named 'upstream'
+          git remote add upstream https://github.com/Pik-4/HsMod
+          git fetch upstream bepinex5
+          
+          # Compare local and upstream commits
+          UPSTREAM_COMMIT=$(git rev-parse upstream/bepinex5)
+          LOCAL_COMMIT=$(git rev-parse HEAD)
+          
+          if [ "$UPSTREAM_COMMIT" != "$LOCAL_COMMIT" ]; then
+            echo "New updates detected. Merging..."
+            git merge upstream/bepinex5 --allow-unrelated-histories -m "Auto-sync with upstream"
+            git push origin bepinex5
+            echo "updated=true" >> $GITHUB_OUTPUT
+          else
+            echo "No new updates."
+            echo "updated=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Setup .NET 8
+        # Run if there was an update OR if you manually triggered the action
+        if: steps.sync.outputs.updated == 'true' || github.event_name == 'workflow_dispatch'
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.x'
+
+      - name: Build Project
+        if: steps.sync.outputs.updated == 'true' || github.event_name == 'workflow_dispatch'
+        run: |
+          cd HsMod
+          # Restore dependencies first (required since build uses --no-restore)
+          dotnet restore
+          # Build the release
+          dotnet build --configuration Release --no-restore
+
+      - name: Upload DLL Artifact
+        if: steps.sync.outputs.updated == 'true' || github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: HsMod-DLL
+          # Attempts to grab the DLL from the path specified in your instructions
+          # Using a wildcard (**) to be safe in case the output path varies slightly
+          path: HsMod/**/Release/**/*.dll
