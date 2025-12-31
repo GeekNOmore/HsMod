@@ -1,10 +1,9 @@
 name: Auto Sync and Build
 
 on:
-  # Check for updates automatically every 6 hours
   schedule:
+    # Run every 6 hours
     - cron: '0 */6 * * *'
-  # Allow you to manually trigger the build from the Actions tab
   workflow_dispatch:
 
 permissions:
@@ -12,14 +11,20 @@ permissions:
 
 jobs:
   sync-and-build:
-    runs-on: ubuntu-latest
+    # CHANGED: Use Windows to support .NET Framework 4.8
+    runs-on: windows-latest
     
+    # CHANGED: Force all run steps to use Bash (so our sync script works on Windows)
+    defaults:
+      run:
+        shell: bash
+
     steps:
       - name: Checkout Fork
         uses: actions/checkout@v4
         with:
-          ref: bepinex5   # We are targeting this specific branch
-          fetch-depth: 0  # Required to merge history
+          ref: bepinex5
+          fetch-depth: 0
 
       - name: Configure Git
         run: |
@@ -29,11 +34,9 @@ jobs:
       - name: Sync with Upstream (Original Repo)
         id: sync
         run: |
-          # Add the original repo as a remote named 'upstream'
           git remote add upstream https://github.com/Pik-4/HsMod
           git fetch upstream bepinex5
           
-          # Compare local and upstream commits
           UPSTREAM_COMMIT=$(git rev-parse upstream/bepinex5)
           LOCAL_COMMIT=$(git rev-parse HEAD)
           
@@ -48,7 +51,6 @@ jobs:
           fi
 
       - name: Setup .NET 8
-        # Run if there was an update OR if you manually triggered the action
         if: steps.sync.outputs.updated == 'true' || github.event_name == 'workflow_dispatch'
         uses: actions/setup-dotnet@v4
         with:
@@ -58,9 +60,7 @@ jobs:
         if: steps.sync.outputs.updated == 'true' || github.event_name == 'workflow_dispatch'
         run: |
           cd HsMod
-          # Restore dependencies first (required since build uses --no-restore)
           dotnet restore
-          # Build the release
           dotnet build --configuration Release --no-restore
 
       - name: Upload DLL Artifact
@@ -68,6 +68,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: HsMod-DLL
-          # Attempts to grab the DLL from the path specified in your instructions
-          # Using a wildcard (**) to be safe in case the output path varies slightly
           path: HsMod/**/Release/**/*.dll
