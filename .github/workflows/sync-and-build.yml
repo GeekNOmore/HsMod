@@ -2,8 +2,8 @@ name: Auto Sync and Build
 
 on:
   schedule:
-    - cron: '0 19 * * *'
-  workflow_dispatch:      # Allow manual trigger
+    - cron: '0 19 * * *' # Checks daily at 6 AM Sydney time
+  workflow_dispatch:      # Manual "Force Build" button
 
 permissions:
   contents: write
@@ -34,20 +34,25 @@ jobs:
           git remote add upstream https://github.com/Pik-4/HsMod
           git fetch upstream bepinex5
           
-          UPSTREAM_COMMIT=$(git rev-parse upstream/bepinex5)
-          LOCAL_COMMIT=$(git rev-parse HEAD)
+          # CHANGED: We count commits in upstream that are NOT in our local repo yet.
+          # If we are "ahead" (like you are now), this number will be 0.
+          # If the original author pushes an update, this number will be > 0.
+          NEW_COMMITS=$(git rev-list HEAD..upstream/bepinex5 --count)
           
-          if [ "$UPSTREAM_COMMIT" != "$LOCAL_COMMIT" ]; then
-            echo "New updates detected. Merging..."
+          echo "New commits found in upstream: $NEW_COMMITS"
+          
+          if [ "$NEW_COMMITS" -gt 0 ]; then
+            echo "New updates detected! Merging..."
             git merge upstream/bepinex5 --allow-unrelated-histories -m "Auto-sync with upstream"
             git push origin bepinex5
             echo "updated=true" >> $GITHUB_OUTPUT
           else
-            echo "No new updates."
+            echo "We are up to date (or ahead). No sync needed."
             echo "updated=false" >> $GITHUB_OUTPUT
           fi
 
       - name: Setup .NET 8
+        # Runs if: (We found an update) OR (You clicked the manual button)
         if: steps.sync.outputs.updated == 'true' || github.event_name == 'workflow_dispatch'
         uses: actions/setup-dotnet@v4
         with:
@@ -58,7 +63,7 @@ jobs:
         run: |
           cd HsMod
           dotnet restore
-          # CHANGED: Force output to a specific folder to avoid path confusion
+          # OUTPUT: Force file to ./BuildOutput so we know exactly where it is
           dotnet build --configuration Release --no-restore --output ./BuildOutput
 
       - name: Generate Release Tag
@@ -73,12 +78,11 @@ jobs:
         with:
           tag_name: ${{ steps.tag.outputs.release_tag }}
           name: Auto-Build ${{ steps.tag.outputs.release_tag }}
-          # CHANGED: Point to our new custom output folder
-          files: HsMod/BuildOutput/**/*.dll
+          # FILE: Points to the specific file in our custom folder
+          files: HsMod/BuildOutput/HsMod.dll
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           
-      # NOTIFICATION STEP
       - name: Notify via Bark
         if: steps.sync.outputs.updated == 'true' || github.event_name == 'workflow_dispatch'
         env:
